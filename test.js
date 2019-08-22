@@ -18,13 +18,7 @@ MongoClient.connect(url, function(err, db) {
   if (err) throw err;
   var dbo = db.db("test");
   dbo.collection("mycol").find({}).toArray(function(err, result) {
-    if (err) throw err;
-    // console.log(result);
-    inputIP = obj.server_ip_address.toString();
-    console.log(inputIP);
-    for (let key in result) {
-        console.log(result[key]);
-    }
-    db.close();
+      const currentIP = result.map(server=>server.server_ip_address);
+      console.log(currentIP.toString());
   });
 });

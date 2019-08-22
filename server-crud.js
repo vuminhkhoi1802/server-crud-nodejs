@@ -11,6 +11,7 @@ const schema = {
     server_user_type: value => /(?:^|\W)developer|user|admin(?:$|\W)/ug.test(value)
 };
 
+
 //Server parameters Validation Function
 const validate = (object, schema) => Object.entries(schema).map(([property, validate]) => [
     property, validate(object[property])
@@ -21,12 +22,19 @@ const validate = (object, schema) => Object.entries(schema).map(([property, vali
     return errors;
 }, []);
 
+const validateServer = async (server) => {
+    return (Object.getOwnPropertyNames(server).length > 0 && validate(server, schema).length === 0)
+}
+
 // Connect to MongoDB
 let client;
 let collection;
 
 const createConnection = async () => {
-    client = await MongoClient.connect(url);
+    client = await MongoClient.connect(url, {
+        useNewUrlParser: true,
+        useUnifiedTopology: true,
+    });
     const db = await client.db(dbName);
     collection = db.collection('mycol');
 };
@@ -39,44 +47,52 @@ const countServers = async () => {
     return await collection.countDocuments();
 };
 
-let currentIP;
-const readCurrentServerIP = async () => {
+const checkServer = async () => {
+    return await collection.find({}).toArray() !== {};
+}
+
+const checkForDuplicateIP = async (server) => {
     const result = await collection.find({}).toArray();
-    for (let key in result) {
-        currentIP = result[key].server_ip_address;
+    if (checkServer()) {
+        const { server_ip_address } = server || {};
+        return (result.some(element => element.server_ip_address === server_ip_address));
     }
+    return false
 }
 
 const addServer = async (server) => {
-    inputIP = server.server_ip_address;
-    const errors = validate(server, schema);
-    await readCurrentServerIP();
-    if (Object.getOwnPropertyNames(server).length > 0 &&
-        errors.length === 0 && (currentIP !== inputIP)) {
-        collection.insertOne(server);
-        console.log("Record is inserted");
+    if (!checkForDuplicateIP(server) && validateServer(server)) {
+        return await collection.insertOne(server);
+    }
+    return false;
+};
+
+const updateServer = async (server, newValues) => {
+    if (!checkForDuplicateIP(server) && validateServer(server)) {
+        return await collection.updateOne(server, newValues);
+    }
+    return false;
+}
+
+const deleteServer = async (server) => {
+    if (checkServer()) {
+        await collection.deleteOne(server);
+        console.log("Record deleted");
         return true;
     } else {
-        for (const { message } of errors) {
-            console.log(message);
-        }
+        console.log("Empty database");
         return false;
     }
-};
+}
 
-
-const readServerData = async () => {
-    const result = await collection.find({}).toArray();
-    for (var key in result ) {
-        return result[key];
-    }
-
-};
-// TO-DO: READ & UPDATE methods for server
 module.exports = {
     countServers,
     addServer,
     createConnection,
     closeConnection,
-    readServerData
+    checkForDuplicateIP,
+    checkServer,
+    updateServer,
+    deleteServer,
+    validateServer
 };
